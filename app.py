@@ -97,7 +97,7 @@ def login():
             return "WRNG_PASS: Parola introdusa este incorecta."
 
     return '''
-        <h4>AuthX</h4>
+        <h4>Deskly versiune vulnerabila</h4>
         <form method="post">
             Email: <input name="email"><br>
             Parola: <input name="password" type="password"><br>
@@ -111,14 +111,35 @@ def list_tickets():
     if 'uid' not in session: return redirect('/login')
     
     db = acces_db()
-    # vulnerabilitat IDOR
+    
+    if request.method == 'POST':
+        titlu = request.form.get('title')
+        descriere = request.form.get('description')
+        
+        db.execute('INSERT INTO tickets (title, description, severity, status, owner_id) VALUES (?, ?, ?, ?, ?)', 
+                   (titlu, descriere, 'LOW', 'OPEN', session['uid']))
+        
+        db.execute('INSERT INTO audit_logs (user_id, action, resource) VALUES (?, ?, ?)', 
+                   (session['uid'], 'CREATE_TICKET', 'tickets'))
+        db.commit()
+
     bilete = db.execute('SELECT * FROM tickets').fetchall()
     db.close()
     
-    html = "<h4>Tichete Suport</h4><ul>"
+    html = '''
+        <h4>Adauga Tichet Nou</h4>
+        <form method="post">
+            Titlu: <input name="title" required><br>
+            Descriere: <input name="description" required><br>
+            <button type="submit">Creeaza</button>
+        </form>
+        <hr>
+        <h4>Toate Tichetele din Sistem</h4>
+        <ul>
+    '''
     for b in bilete:
-        html += f"<li>{b['title']} - Status: {b['status']}</li>"
-    html += "</ul><a href='/'>Inapoi</a>"
+        html += f"<li>[Owner ID: {b['owner_id']}] <b>{b['title']}</b> - Status: {b['status']}</li>"
+    html += "</ul><a href='/'>Inapoi la Dashboard</a>"
     return html
 
 @app.route('/forgot', methods=['GET', 'POST'])
@@ -135,6 +156,34 @@ def forgot():
 def logout():
     session.clear()
     return redirect('/')
+
+
+@app.route('/reset', methods=['GET', 'POST'])
+def reset_password():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        token_introdus = request.form.get('token')
+        parola_noua = request.form.get('password')
+        
+        #4.6: Resetarea parolei fara control corespunzator.
+        
+        db = acces_db()
+        db.execute('UPDATE users SET password_hash = ? WHERE email = ?', (parola_noua, email))
+        db.commit()
+        db.close()
+        
+        return f"Parola contului {email} a fost schimbata cu success!"
+
+    return '''
+        <h3>Setare Parola Noua</h3>
+        <form method="post">
+            Email: <input name="email"><br>
+            Token: <input name="token"><br>
+            Parola Noua: <input name="password" type="password"><br>
+            <button type="submit">Schimba Parola</button>
+        </form>
+    '''
+
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
